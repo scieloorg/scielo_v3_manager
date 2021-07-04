@@ -16,6 +16,14 @@ from mongoengine import (
 
 
 @retry(wait=wait_exponential(), stop=stop_after_attempt(10))
+def db_connect_by_uri(uri, **extra_dejson):
+    """
+    mongodb://{login}:{password}@{host}:{port}/{database}
+    """
+    connect(host=uri, **extra_dejson)
+
+
+@retry(wait=wait_exponential(), stop=stop_after_attempt(10))
 def db_connect(host, port, schema, login, password, **extra_dejson):
     uri = "mongodb://{creds}{host}{port}/{database}".format(
         creds="{}:{}@".format(login, password) if login else "",
