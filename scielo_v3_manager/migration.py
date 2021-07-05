@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from opac_schema.v1.models import Article
 
 from .models import db_connect_by_uri
-from .main import register
+from .manage import register
 
 
 mongo_options = {
