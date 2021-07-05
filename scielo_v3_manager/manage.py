@@ -1,4 +1,4 @@
-from .models import DocsIds, db_connect
+from .models import DocsIds, db_connect_by_uri
 from .v3_gen import generates
 
 
@@ -71,5 +71,6 @@ def register(doi, filename, v2, aop, v3, status, v1, others, fields,
     return obj
 
 
-def connect(host, port, schema, login, password, **extra_dejson):
-    db_connect(host, port, schema, login, password, **extra_dejson)
+def connect(uri_and_db, **extra_dejson):
+    db_connect_by_uri(uri_and_db, **extra_dejson)
+

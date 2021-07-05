@@ -8,7 +8,7 @@ with open(os.path.join(setup_path, "README.md")) as readme:
 
 setuptools.setup(
     name="scielo_v3_manager",
-    version="0.1",
+    version="0.3",
     author="SciELO Dev Team",
     author_email="scielo-dev@googlegroups.com",
     description="scielo_v3_manager is pid manager",
@@ -21,8 +21,12 @@ setuptools.setup(
     include_package_data=False,
     python_requires=">=3.7",
     install_requires=[
+        "opac_schema",
+        "SQLAlchemy",
         "mongoengine",
         "tenacity",
+        "psycopg2",
+        "psycopg2-binary",
     ],
     test_suite="tests",
     classifiers=[
