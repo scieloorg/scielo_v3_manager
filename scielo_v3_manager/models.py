@@ -16,11 +16,13 @@ from mongoengine import (
 
 
 @retry(wait=wait_exponential(), stop=stop_after_attempt(10))
-def db_connect_by_uri(uri, **extra_dejson):
+def db_connect_by_uri(uri):
     """
     mongodb://{login}:{password}@{host}:{port}/{database}
     """
-    connect(host=uri, **extra_dejson)
+    conn = connect(host=uri)
+    print("%s connected" % uri)
+    return conn
 
 
 @retry(wait=wait_exponential(), stop=stop_after_attempt(10))
@@ -32,7 +34,7 @@ def db_connect(host, port, schema, login, password, **extra_dejson):
         database=schema,
     )
 
-    connect(host=uri, **extra_dejson)
+    return connect(host=uri, **extra_dejson)
 
 
 class DocsIds(Document):
@@ -85,8 +87,43 @@ class DocsIds(Document):
 
     def save(self, *args, **kwargs):
         if not self.created:
-            self.created = datetime.utcnow().isoformat()
-        if not self.updated:
-            self.updated = datetime.utcnow().isoformat()
+            self.created = datetime.utcnow().isoformat().replace("T", " ")
+        self.updated = datetime.utcnow().isoformat().replace("T", " ")
 
         return super(DocsIds, self).save(*args, **kwargs)
+
+
+def create_obj(_id, doi, filename, v2, aop, v3, status, v1, others, fields):
+    if not v3 or not v2:
+        raise ValueError(
+            "PID manager missing v2 or v3: %s" % str((v2, v3)))
+    obj = DocsIds()
+    obj._id = _id
+    obj.doi = doi or ""
+    obj.filename = filename or ""
+    obj.v1 = v1 or ""
+    obj.v2 = v2
+    obj.v3 = v3
+    obj.aop = aop or ""
+    obj.others = others or []
+    obj.fields = fields or {}
+    obj.status = status or "active"
+    obj.prefixes = [v[:-5] for v in (v2, aop) if v]
+    return obj
+
+
+def complete_data(
+        obj, _id, doi, filename, v2, aop, v3, status, v1, others, fields):
+
+    obj.doi = doi or obj.doi or ""
+    obj.filename = filename or obj.filename or ""
+    obj.v1 = v1 or obj.v1 or ""
+    obj.v2 = v2 or obj.v2 or ""
+    obj.v3 = v3 or obj.v3 or ""
+    obj.aop = aop or obj.aop or ""
+
+    obj.others = others or obj.others or []
+    obj.fields = fields or obj.fields or {}
+    obj.status = status or obj.status or "active"
+    obj.prefixes = [v[:-5] for v in (obj.v2, obj.aop) if v]
+    return obj
