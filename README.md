@@ -1,12 +1,23 @@
 # v3_manager
 
 
-```console
+```python
+import os
 
-from scielo_v3_manager import manage
+from scielo_v3_manager.v3_gen import generates
+from scielo_v3_manager.pid_manager import Manager
 
-#manage.connect('0.0.0.0', '27017', schema='meu_opac', login='', password='')
-manage.connect("mongodb://0.0.0.0:27017/opac_br")
-manage.register(doi='doi', filename='filename', v2='v2', aop='aop', v3='v3', status='status', v1= 'v1', others=['x', 'y'], fields={'f': 'b'})
+local = "postgresql+psycopg2://user@localhost:5432/pid_manager"
 
+manager = Manager(local, 20000)
+
+done = manager.manage(
+                v2=v2,
+                v3=None,
+                aop=aop,
+                filename=os.path.basename(filename),
+                doi=doi,
+                status="active",
+                generate_v3=generates,
+            )
 ```
