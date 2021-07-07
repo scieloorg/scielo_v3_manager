@@ -1,4 +1,4 @@
-from .models import DocsIds, db_connect_by_uri
+from .models import DocsIds, db_connect_by_uri, complete_data
 from .v3_gen import generates
 
 
@@ -42,35 +42,26 @@ def get(doi, filename, v2, aop=None, v3=None):
             return rec
 
 
-def _update(record, doi, filename, v2, aop, v3, status, v1, others, fields):
-    if not v3 or not v2:
-        raise ValueError("PID manager missing v2 or v3: %s" % str((v2, v3)))
-    record._id = v3
-    record.doi = doi
-    record.filename = filename
-    record.v1 = v1 or ""
-    record.v2 = v2
-    record.v3 = v3
-    record.aop = aop or ""
-    record.others = others or []
-    record.fields = fields or {}
-    record.status = status or "active"
-    record.prefixes = [v[:-5] for v in (v2, aop) if v]
+def register(doi, filename, v2, aop, v3, status, v1, others, fields):
+    try:
+        # obtém o registro na base de dados
+        obj = get(doi, filename, v2, aop, v3)
 
+        if not obj:
+            # cria um registro novo
+            obj = DocsIds()
+            v3 = v3 or generates()
 
-def register(doi, filename, v2, aop, v3, status, v1, others, fields,
-             generate_v3=generates):
-    obj = get(doi, filename, v2, aop, v3)
-    if not obj:
-        obj = DocsIds()
+        # atualiza os dados
+        complete_data(
+            obj, doi, filename, v2, aop, v3, status, v1, others, fields)
 
-    v3 = v3 or generate_v3 and generate_v3()
-    _update(obj, doi, filename, v2, aop, v3, status, v1, others, fields)
+        # salva o registro
+        if not obj.v3 or not obj.v2:
+            raise ValueError(
+                "PID manager missing v2 or v3: %s" % str((obj.v2, obj.v3)))
 
-    obj.save()
-    return obj
-
-
-def connect(uri_and_db, **extra_dejson):
-    db_connect_by_uri(uri_and_db, **extra_dejson)
-
+        obj.save()
+        return obj
+    except Exception as e:
+        print(e)
