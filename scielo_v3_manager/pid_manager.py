@@ -99,7 +99,8 @@ class Manager:
 
     def manage(self, v2, v3, aop, filename, doi, status, generate_v3):
         """
-        Consulta / cria registro
+        Obtém registro consultando por v2, aop, doi, filename
+        Cria / atualiza o registro
         Retorna dicionário cujas chaves são:
             input, found, saved, error, warning
         """
@@ -109,53 +110,88 @@ class Manager:
                 "v2": v2,
                 "aop": aop,
                 "doi": doi,
+                "filename": filename,
                 "status": status,
             }
         }
         saved = None
         try:
+            if not v2:
+                raise ValueError("Manager.manage requires parameters: v2")
             with self.session_scope() as session:
                 # obtém o registro
                 registered = None
-                if not registered and v3:
-                    registered = self._get_record_by_v3(
-                        session, v3, v2, filename, doi, aop)
                 if not registered:
                     registered = self._get_record(
                         session, v2, filename, doi, aop)
                 if not registered:
                     registered = self._get_record_old(session, v2, aop)
-
                 if registered:
                     result['registered'] = self._format_record(registered)
 
                 # guarda o registro
                 if len(filename) > 80:
                     result['warning'] = {"filename": filename}
-
-                if registered and not hasattr(registered, 'created'):
-                    # versão anterior do schema, registrar no novo schema
+                if registered:
+                    if not hasattr(registered, 'created'):
+                        # versão anterior do schema (v2, v3),
+                        # então registrar no novo schema
+                        saved = self._register(
+                            session, v2, registered.v3, aop,
+                            filename, doi, status)
+                    else:
+                        # já está registraddo no schema novo,
+                        # então fazer atualização
+                        saved = self._register(
+                            session, v2, v3, aop,
+                            filename, doi, status, registered)
+                else:
                     saved = self._register(
-                        session, v2, registered.v3, aop, filename, doi, status)
-
-                if not registered:
-                    saved = self._register(
-                        session, v2, generate_v3(), aop, filename, doi, status)
+                        session, v2,
+                        self.get_unique_v3(session, v3, generate_v3),
+                        aop, filename, doi, status)
+                if saved:
+                    result['saved'] = saved
         except RegistrationError as e:
             result['error'] = str(e)
         except Exception as e:
             result['error'] = str(e)
-        else:
-            if saved:
-                result['saved'] = self._format_record(saved)
         finally:
             return result
 
-    def _register(self, session, v2, v3, aop, filename, doi, status):
+    def get_unique_v3(self, session, v3, generate_v3):
+        unique_v3 = v3 or generate_v3()
+        while True:
+            exist = bool(
+                session.query(NewPidVersion).filter_by(v3=unique_v3).first() or
+                session.query(PidVersion).filter_by(v3=unique_v3).first()
+            )
+            if not exist:
+                return unique_v3
+            unique_v3 = generate_v3()
+
+    def _register(self, session, v2, v3, aop, filename, doi, status, row=None):
         filename = filename[:80]
         prefix_v2 = v2 and v2[:-5] or ""
         prefix_aop = aop and aop[:-5] or ""
-        data = NewPidVersion(
+        if row:
+            # update
+            data = {
+                "v2": v2,
+                "v3": v3 or row.v3,
+                "aop": aop or row.aop,
+                "doi": doi or row.doi,
+                "filename": filename or row.filename,
+                "status": status or row.status,
+                "prefix_aop": prefix_aop or row.prefix_aop,
+                "prefix_v2": prefix_v2 or row.prefix_v2,
+            }
+            session.query(NewPidVersion).filter(
+                NewPidVersion.id == row.id).update(data)
+            return data
+        else:
+            # create
+            data = NewPidVersion(
                 v2=v2,
                 v3=v3,
                 aop=aop or "",
@@ -165,8 +201,8 @@ class Manager:
                 prefix_aop=prefix_aop,
                 prefix_v2=prefix_v2,
             )
-        session.add(data)
-        return data
+            session.add(data)
+            return self._format_record(data)
 
     def _get_record_by_v3(self, session, v3, v2, filename, doi, aop):
         if not v3:
@@ -237,8 +273,9 @@ class Manager:
                 if rec.id > i:
                     i = rec.id
                     record = rec
-        for rec in session.query(PidVersion).filter_by(v2=v2).all():
-            if rec.id > i:
-                i = rec.id
-                record = rec
+        if v2:
+            for rec in session.query(PidVersion).filter_by(v2=v2).all():
+                if rec.id > i:
+                    i = rec.id
+                    record = rec
         return record
