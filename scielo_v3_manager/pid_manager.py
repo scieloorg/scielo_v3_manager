@@ -12,6 +12,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 Base = declarative_base()
 
+logging.basicConfig()
+logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.DEBUG)
+
 
 class RegistrationError(Exception):
     ...
@@ -58,11 +62,18 @@ class NewPidVersion(Base):
 
 
 class Manager:
-    def __init__(self, name, timeout=None):
-        engine_args = {"pool_timeout": timeout} if timeout else {}
-        self.engine = create_engine(name, **engine_args)
-        Base.metadata.create_all(self.engine)
-        self.Session = sessionmaker(bind=self.engine)
+    def __init__(self, name, timeout=None, _engine_args={}):
+        self._name = name
+        self._engine_args = {"pool_timeout": timeout} if timeout else {}
+        self._engine_args.update({"pool_size": 10, "max_overflow": 20})
+        self._engine_args.update(_engine_args)
+        self.setup()
+
+    def setup(self):
+        self._engine = create_engine(
+            self._name, logging_name='pid_manager', **self._engine_args)
+        Base.metadata.create_all(self._engine)
+        self.Session = sessionmaker(bind=self._engine)
 
     @contextmanager
     def session_scope(self):
