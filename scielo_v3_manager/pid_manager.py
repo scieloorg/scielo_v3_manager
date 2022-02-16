@@ -10,11 +10,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 
+
 Base = declarative_base()
 
 logging.basicConfig()
 logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
 logging.getLogger("sqlalchemy.pool").setLevel(logging.DEBUG)
+
+
+class MoreThanOneRecordFoundError(Exception):
+    ...
 
 
 class RegistrationError(Exception):
@@ -59,6 +64,258 @@ class NewPidVersion(Base):
             '<NewPidVersion(v2="%s", v3="%s", aop="%s", doi="%s", filename="%s")>' %
             (self.v2, self.v3, self.aop, self.doi, self.filename)
         )
+
+
+class Documents(Base):
+    __tablename__ = 'docs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    v2 = Column(String(23), index=True, nullable=False)
+    v3 = Column(String(23), index=True, unique=True, nullable=False)
+    aop = Column(String(23), index=True)
+
+    filename = Column(String(80), index=True)
+    doi = Column(String(80), index=True)
+    issn = Column(String(9), index=True, nullable=False)
+    pub_year = Column(String(4), index=True, nullable=False)
+    issue_order = Column(String(4), index=True, nullable=False)
+    elocation = Column(String(10), index=True)
+    fpage = Column(String(10), index=True)
+    lpage = Column(String(10), index=True)
+    first_author_surname = Column(String(30), index=True)
+    last_author_surname = Column(String(30), index=True)
+
+    article_title = Column(String(100))
+    other_pids = Column(String(200))
+    status = Column(String(15))
+
+    created = Column(DateTime, default=datetime.utcnow())
+    updated = Column(DateTime, default=datetime.utcnow(), onupdate=datetime.now())
+
+    __table_args__ = (
+        UniqueConstraint('v3', name='_docs_'),
+    )
+
+    def __repr__(self):
+        return (
+            '<Documents(v2="%s", v3="%s", aop="%s", doi="%s", filename="%s")>' %
+            (self.v2, self.v3, self.aop, self.doi, self.filename)
+        )
+
+    @property
+    def as_dict(self):
+        NAMES = (
+            'v2', 'v3', 'aop', 'filename', 'doi',
+            'pub_year', 'issue_order', 'elocation', 'fpage', 'lpage',
+            'first_author_surname', 'last_author_surname',
+            'article_title', 'other_pids',
+            'issn',
+            'id', 'updated', 'created',
+        )
+        values = (
+            self.v2, self.v3, self.aop, self.filename, self.doi,
+            self.pub_year, self.issue_order, self.elocation, self.fpage, self.lpage,
+            self.first_author_surname, self.last_author_surname,
+            self.article_title, self.other_pids,
+            self.issn,
+            self.id, str(self.updated), str(self.created),
+        )
+        return dict(
+            zip(NAMES, values)
+        )
+
+
+class DocManager:
+
+    def __init__(self, session, generate_v3,
+                 v2, v3, aop, filename, doi,
+                 status,
+                 pub_year, issue_order, elocation, fpage, lpage,
+                 first_author_surname, last_author_surname,
+                 article_title, other_pids):
+        self._input_data = None
+        self._session = session
+        self._generate_v3 = generate_v3
+        issue_order = str(issue_order)
+        issue_order = (issue_order[4:] or issue_order).zfill(4)
+        self._load_input(
+            v2[:23], v3, aop[:23], filename[:80], doi,
+            status[:15],
+            pub_year, issue_order, elocation, fpage, lpage,
+            first_author_surname[:30],
+            last_author_surname[:30],
+            article_title[:100], other_pids[:200]
+        )
+
+    def _load_input(self, v2, v3, aop, filename, doi,
+                    status,
+                    pub_year, issue_order, elocation, fpage, lpage,
+                    first_author_surname, last_author_surname,
+                    article_title, other_pids,
+                    ):
+        _values = (
+            v2, aop, doi,
+            status,
+            pub_year, issue_order, elocation, fpage, lpage,
+            first_author_surname, last_author_surname,
+            article_title,
+        )
+        values = []
+        for vv in _values:
+            try:
+                values.append(vv.upper())
+            except (AttributeError, TypeError, ValueError):
+                values.append(vv)
+        values.append(v2[1:10])
+        values.append(v3)
+        values.append(other_pids)
+        values.append(filename)
+        self._input_data = dict(zip(self._input_attributes, values))
+
+    @property
+    def input_data(self):
+        return self._input_data
+
+    @property
+    def _input_attributes(self):
+        return (
+            'v2', 'aop', 'doi',
+            'status',
+            'pub_year', 'issue_order', 'elocation', 'fpage', 'lpage',
+            'first_author_surname', 'last_author_surname',
+            'article_title',
+            'issn', 'v3', 'other_pids', 'filename',
+        )
+
+    @property
+    def _doc_attributes(self):
+        return (
+            'pub_year', 'issue_order', 'elocation', 'fpage', 'lpage', 'doi',
+            'first_author_surname', 'last_author_surname', 'issn',
+        )
+
+    def _db_query(self, **kwargs):
+        return self._session.query(Documents).filter_by(**kwargs).all()
+
+    def _get_document(self):
+        # {'aop', 'article_title', 'filename', 'other_pids', 'status', 'v2', 'v3'}
+        d = {
+            k: self.input_data.get(k) or ''
+            for k in self._doc_attributes
+        }
+        found = self._db_query(**d)
+
+        if len(found) == 0:
+            return None
+
+        v3 = self.input_data.get("v3") or ''
+        v2 = self.input_data.get("v2") or ''
+        aop = self.input_data.get("aop") or ''
+        filename = self.input_data.get("filename") or ''
+
+        matches = []
+        for item in found:
+            if v3 and v3 == item.v3:
+                matches.append(item)
+                continue
+
+            if filename == item.filename:
+                matches.append(item)
+                continue
+
+            item_pids = f"{item.other_pids} {item.v2} {item.aop}"
+
+            if aop and aop in item_pids:
+                matches.append(item)
+                continue
+
+            if v2 and v2 in item_pids:
+                matches.append(item)
+                continue
+
+        if len(matches) == 0:
+            return None
+
+        if len(matches) == 1:
+            return matches[0]
+
+        raise MoreThanOneRecordFoundError(
+            "Found more than one: {}".format(
+                " ".join([doc.id for doc in matches])
+            )
+        )
+
+    def _get_unique_v3(self, v3):
+        while True:
+            unique_v3 = v3 or self._generate_v3()
+            registered = self._db_query(**{"v3": unique_v3})
+            if not registered:
+                return unique_v3
+
+    def _register_doc(self):
+        # create
+        data = Documents(
+            issn=self.input_data.get("issn") or '',
+            v2=self.input_data.get("v2") or '',
+            v3=self._get_unique_v3(self.input_data.get("v3")),
+            aop=self.input_data.get("aop") or '',
+            filename=self.input_data.get("filename") or '',
+            doi=self.input_data.get("doi") or '',
+            pub_year=self.input_data.get("pub_year") or '',
+            issue_order=self.input_data.get("issue_order") or '',
+            elocation=self.input_data.get("elocation") or '',
+            fpage=self.input_data.get("fpage") or '',
+            lpage=self.input_data.get("lpage") or '',
+            first_author_surname=self.input_data.get("first_author_surname") or '',
+            last_author_surname=self.input_data.get("last_author_surname") or '',
+            article_title=(self.input_data.get("article_title") or ''),
+            other_pids=(self.input_data.get("other_pids") or ''),
+            status=(self.input_data.get("status") or ''),
+        )
+        self._session.add(data)
+
+        try:
+            self._session.commit()
+        except SQLAlchemyError as e:
+            self._session.rollback()
+            raise RegistrationError("Rollback: %s" % str(e))
+        return data.as_dict
+
+    def manage_docs(self):
+        """
+        Obtém registro consultando com dados além de v2, aop, doi, filename
+        Cria / atualiza o registro
+        Retorna dicionário cujas chaves são:
+            input, found, saved, error, warning
+        """
+        response = {}
+        response["input"] = self.input_data
+        try:
+            registered = self._get_document()
+        except MoreThanOneRecordFoundError as e:
+            # melhor criar novo registro e tratar da ambiguidade posteriormente
+            # que recuperar erroneamente o registro
+            response['exception'] = {
+                'type': str(type(e)),
+                'msg': str(e)
+            }
+            registered = None
+        if registered:
+            response['registered'] = registered.as_dict
+            return response
+        try:
+            response['saved'] = self._register_doc()
+        except RegistrationError as e:
+            response['exception'] = {
+                'type': str(type(e)),
+                'msg': str(e)
+            }
+        except Exception as e:
+            response['exception'] = {
+                'type': str(type(e)),
+                'msg': str(e)
+            }
+        return response
 
 
 class Manager:
@@ -107,6 +364,24 @@ class Manager:
                     }
                 )
             return result
+
+    def manage_docs(self, generate_v3, v2, v3, aop, filename, doi,
+                    status,
+                    pub_year, issue_order, elocation, fpage, lpage,
+                    first_author_surname, last_author_surname,
+                    article_title, other_pids):
+        if len(issue_order) > 4:
+            issue_order = issue_order[4:].zfill(4)
+        with self.session_scope() as session:
+            doc_manager = DocManager(
+                session, generate_v3,
+                v2, v3, aop, filename, doi,
+                status,
+                pub_year, issue_order, elocation, fpage, lpage,
+                first_author_surname, last_author_surname,
+                article_title, other_pids)
+            result = doc_manager.manage_docs()
+        return result
 
     def manage(self, v2, v3, aop, filename, doi, status, generate_v3):
         """
@@ -290,3 +565,4 @@ class Manager:
                     i = rec.id
                     record = rec
         return record
+
