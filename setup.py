@@ -8,10 +8,10 @@ with open(os.path.join(setup_path, "README.md")) as readme:
 
 setuptools.setup(
     name="scielo_v3_manager",
-    version="0.4",
+    version="0.7",
     author="SciELO Dev Team",
     author_email="scielo-dev@googlegroups.com",
-    description="scielo_v3_manager is pid manager",
+    description="scielo_v3_manager PID v3 provider and validator",
     long_description=long_description,
     long_description_content_type="text/markdown",
     license="2-clause BSD",
