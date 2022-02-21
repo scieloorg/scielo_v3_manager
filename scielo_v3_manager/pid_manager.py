@@ -235,51 +235,68 @@ class DocManager:
     def _db_query(self, **kwargs):
         return self._session.query(Documents).filter_by(**kwargs).all()
 
-    def _get_document(self):
-        # {'aop', 'article_title', 'filename', 'other_pids', 'status', 'v2', 'v3'}
-        d = {
+    def _get_document_published_in_an_issue_attributes(self):
+        """
+        Busca pelos dados do artigo + issue:
+            ['issn', 'pub_year',
+             'doi', 'first_author_surname', 'last_author_surname'] +
+            ['issue_order', 'elocation', 'fpage', 'lpage']
+        """
+        params = {
+            k: self.input_data.get(k) or ''
+            for k in self._doc_and_issue_attributes
+        }
+        found = self._db_query(**params)
+        if len(found) == 1:
+            # encontrou
+            return found[0]
+
+        if len(found) > 1:
+            raise MoreThanOneRecordFoundError(
+                "Found more than one: {}".format(
+                    " ".join([doc.id for doc in found])
+                )
+            )
+
+    def _get_document_aop_version(self):
+        """
+        Busca pela versão aop, ou seja, busca pelos dados do artigo:
+            'pub_year',
+            'doi',
+            'first_author_surname', 'last_author_surname',
+            'issn',
+            e
+            "volume": "", "number": "", "suppl": "", "fpage": "", "lpage": ""
+
+        Caso não encontre, busca somente pelos dados de artigo, pois ele pode
+            ter uma versão ahead of print e, por isso, não encontrou
+            o documento com os dados do fascículo atual
+        Verifica se o registro encontrado é único e tem dados de aop,
+            então cria um registro com os dados do artigo no fascículo e
+            adiciona o pid aop e reaproveita o v3
+        Mas se mais de um registro for encontrado ou o registro não é de aop,
+            então há um conflito, cria um novo registro com os dados atuais,
+            gera um novo v3
+        """
+        params = {
             k: self.input_data.get(k) or ''
             for k in self._doc_attributes
         }
-        found = self._db_query(**d)
+        params.update(
+            {"volume": "", "number": "", "suppl": "", "fpage": "", "lpage": ""}
+        )
+        found = self._db_query(**params)
 
         if len(found) == 0:
+            # não está registrado
             return None
 
-        v3 = self.input_data.get("v3") or ''
-        v2 = self.input_data.get("v2") or ''
-        aop = self.input_data.get("aop") or ''
-        filename = self.input_data.get("filename") or ''
-
-        matches = []
-        for item in found:
-            if v3 and v3 == item.v3:
-                matches.append(item)
-                continue
-
-            if filename == item.filename:
-                matches.append(item)
-                continue
-
-            item_pids = f"{item.other_pids} {item.v2} {item.aop}"
-
-            if aop and aop in item_pids:
-                matches.append(item)
-                continue
-
-            if v2 and v2 in item_pids:
-                matches.append(item)
-                continue
-
-        if len(matches) == 0:
-            return None
-
-        if len(matches) == 1:
-            return matches[0]
+        if len(found) == 1:
+            return {"aop": doc.v2, "v3": doc.v3}
 
         raise MoreThanOneRecordFoundError(
             "Found more than one: {}".format(
-                " ".join([doc.id for doc in matches])
+                " ".join([doc.id for doc in found])
             )
         )
 
@@ -329,10 +346,14 @@ class DocManager:
         Retorna dicionário cujas chaves são:
             input, found, saved, error, warning
         """
+        recovered_data = {}
         response = {}
         response["input"] = self.input_data
         try:
-            registered = self._get_document()
+            # busca o documento com dados do fascículo ()
+            registered = self._get_document_with_issue_attributes()
+            if not registered:
+                recovered_data = self._get_document_aop_version()
         except MoreThanOneRecordFoundError as e:
             # melhor criar novo registro e tratar da ambiguidade posteriormente
             # que recuperar erroneamente o registro
