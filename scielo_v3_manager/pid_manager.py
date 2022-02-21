@@ -210,19 +210,26 @@ class DocManager:
     @property
     def _input_attributes(self):
         return (
-            'v2', 'aop', 'doi',
-            'status',
-            'pub_year', 'issue_order', 'elocation', 'fpage', 'lpage',
-            'first_author_surname', 'last_author_surname',
-            'article_title',
-            'issn', 'v3', 'other_pids', 'filename',
+            self._doc_and_issue_attributes + [
+                'aop', 'v2', 'v3', 'other_pids',
+                'article_title', 'filename',
+                'volume', 'number', 'suppl',
+                'status',
+            ]
         )
 
     @property
     def _doc_attributes(self):
+        return [
+            'issn', 'pub_year',
+            'doi', 'first_author_surname', 'last_author_surname'
+        ]
+
+    @property
+    def _doc_and_issue_attributes(self):
         return (
-            'pub_year', 'issue_order', 'elocation', 'fpage', 'lpage', 'doi',
-            'first_author_surname', 'last_author_surname', 'issn',
+            self._doc_attributes +
+            ['issue_order', 'elocation', 'fpage', 'lpage']
         )
 
     def _db_query(self, **kwargs):
