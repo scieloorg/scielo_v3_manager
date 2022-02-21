@@ -307,28 +307,30 @@ class DocManager:
             if not registered:
                 return unique_v3
 
-    def _register_doc(self):
+    def _register_doc(self, recovered_data=None):
         # create
+        input_data = self.input_data.copy()
+        input_data.update(recovered_data or {})
         data = Documents(
-            issn=self.input_data.get("issn") or '',
-            v2=self.input_data.get("v2") or '',
-            v3=self._get_unique_v3(self.input_data.get("v3")),
-            aop=self.input_data.get("aop") or '',
-            filename=self.input_data.get("filename") or '',
-            doi=self.input_data.get("doi") or '',
-            pub_year=self.input_data.get("pub_year") or '',
-            issue_order=self.input_data.get("issue_order") or '',
+            issn=input_data.get("issn") or '',
+            v2=input_data.get("v2") or '',
+            v3=self._get_unique_v3(input_data.get("v3")),
+            aop=input_data.get("aop") or '',
+            filename=input_data.get("filename") or '',
+            doi=input_data.get("doi") or '',
+            pub_year=input_data.get("pub_year") or '',
+            issue_order=input_data.get("issue_order") or '',
             volume=input_data.get("volume") or '',
             number=input_data.get("number") or '',
             suppl=input_data.get("suppl") or '',
-            elocation=self.input_data.get("elocation") or '',
-            fpage=self.input_data.get("fpage") or '',
-            lpage=self.input_data.get("lpage") or '',
-            first_author_surname=self.input_data.get("first_author_surname") or '',
-            last_author_surname=self.input_data.get("last_author_surname") or '',
-            article_title=(self.input_data.get("article_title") or ''),
-            other_pids=(self.input_data.get("other_pids") or ''),
-            status=(self.input_data.get("status") or ''),
+            elocation=input_data.get("elocation") or '',
+            fpage=input_data.get("fpage") or '',
+            lpage=input_data.get("lpage") or '',
+            first_author_surname=input_data.get("first_author_surname") or '',
+            last_author_surname=input_data.get("last_author_surname") or '',
+            article_title=(input_data.get("article_title") or ''),
+            other_pids=(input_data.get("other_pids") or ''),
+            status=(input_data.get("status") or ''),
         )
         self._session.add(data)
 
@@ -353,6 +355,7 @@ class DocManager:
             # busca o documento com dados do fascículo ()
             registered = self._get_document_with_issue_attributes()
             if not registered:
+                # recupera dados de aop, se aplicável
                 recovered_data = self._get_document_aop_version()
         except MoreThanOneRecordFoundError as e:
             # melhor criar novo registro e tratar da ambiguidade posteriormente
@@ -366,7 +369,7 @@ class DocManager:
             response['registered'] = registered.as_dict
             return response
         try:
-            response['saved'] = self._register_doc()
+            response['saved'] = self._register_doc(recovered_data)
         except RegistrationError as e:
             response['exception'] = {
                 'type': str(type(e)),
