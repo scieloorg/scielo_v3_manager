@@ -71,7 +71,7 @@ class Documents(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     v2 = Column(String(23), index=True, nullable=False)
-    v3 = Column(String(23), index=True, unique=True, nullable=False)
+    v3 = Column(String(23), index=True, nullable=False)
     aop = Column(String(23), index=True)
 
     filename = Column(String(80), index=True)
@@ -79,6 +79,9 @@ class Documents(Base):
     issn = Column(String(9), index=True, nullable=False)
     pub_year = Column(String(4), index=True, nullable=False)
     issue_order = Column(String(4), index=True, nullable=False)
+    volume = Column(String(10), index=True)
+    number = Column(String(10), index=True)
+    suppl = Column(String(10), index=True)
     elocation = Column(String(10), index=True)
     fpage = Column(String(10), index=True)
     lpage = Column(String(10), index=True)
@@ -130,7 +133,9 @@ class DocManager:
     def __init__(self, session, generate_v3,
                  v2, v3, aop, filename, doi,
                  status,
-                 pub_year, issue_order, elocation, fpage, lpage,
+                 pub_year, issue_order,
+                 volume, number, suppl,
+                 elocation, fpage, lpage,
                  first_author_surname, last_author_surname,
                  article_title, other_pids):
         self._input_data = None
@@ -141,7 +146,9 @@ class DocManager:
         self._load_input(
             v2[:23], v3, aop[:23], filename[:80], doi,
             status[:15],
-            pub_year, issue_order, elocation, fpage, lpage,
+            pub_year, issue_order,
+            volume, number, suppl,
+            elocation, fpage, lpage,
             first_author_surname[:30],
             last_author_surname[:30],
             article_title[:100], other_pids[:200]
@@ -149,14 +156,18 @@ class DocManager:
 
     def _load_input(self, v2, v3, aop, filename, doi,
                     status,
-                    pub_year, issue_order, elocation, fpage, lpage,
+                    pub_year, issue_order,
+                    volume, number, suppl,
+                    elocation, fpage, lpage,
                     first_author_surname, last_author_surname,
                     article_title, other_pids,
                     ):
         _values = (
             v2, aop, doi,
             status,
-            pub_year, issue_order, elocation, fpage, lpage,
+            pub_year, issue_order,
+            volume, number, suppl,
+            elocation, fpage, lpage,
             first_author_surname, last_author_surname,
             article_title,
         )
@@ -263,6 +274,9 @@ class DocManager:
             doi=self.input_data.get("doi") or '',
             pub_year=self.input_data.get("pub_year") or '',
             issue_order=self.input_data.get("issue_order") or '',
+            volume=input_data.get("volume") or '',
+            number=input_data.get("number") or '',
+            suppl=input_data.get("suppl") or '',
             elocation=self.input_data.get("elocation") or '',
             fpage=self.input_data.get("fpage") or '',
             lpage=self.input_data.get("lpage") or '',
@@ -367,7 +381,9 @@ class Manager:
 
     def manage_docs(self, generate_v3, v2, v3, aop, filename, doi,
                     status,
-                    pub_year, issue_order, elocation, fpage, lpage,
+                    pub_year, issue_order,
+                    volume, number, suppl,
+                    elocation, fpage, lpage,
                     first_author_surname, last_author_surname,
                     article_title, other_pids):
         if len(issue_order) > 4:
@@ -377,7 +393,9 @@ class Manager:
                 session, generate_v3,
                 v2, v3, aop, filename, doi,
                 status,
-                pub_year, issue_order, elocation, fpage, lpage,
+                pub_year, issue_order,
+                volume, number, suppl,
+                elocation, fpage, lpage,
                 first_author_surname, last_author_surname,
                 article_title, other_pids)
             result = doc_manager.manage_docs()
