@@ -74,8 +74,8 @@ class Documents(Base):
     v3 = Column(String(23), index=True, nullable=False)
     aop = Column(String(23), index=True)
 
-    filename = Column(String(80), index=True)
-    doi = Column(String(80), index=True)
+    filename = Column(String(50), index=True)
+    doi = Column(String(50), index=True)
     issn = Column(String(9), index=True, nullable=False)
     pub_year = Column(String(4), index=True, nullable=False)
     issue_order = Column(String(4), index=True, nullable=False)
@@ -88,7 +88,7 @@ class Documents(Base):
     first_author_surname = Column(String(30), index=True)
     last_author_surname = Column(String(30), index=True)
 
-    article_title = Column(String(100))
+    article_title = Column(String(50))
     other_pids = Column(String(200))
     status = Column(String(15))
 
@@ -141,17 +141,15 @@ class DocManager:
         self._input_data = None
         self._session = session
         self._generate_v3 = generate_v3
-        issue_order = str(issue_order)
-        issue_order = (issue_order[4:] or issue_order).zfill(4)
         self._load_input(
-            v2[:23], v3, aop[:23], filename[:80], doi,
-            status[:15],
+            v2, v3, aop, filename, doi,
+            status,
             pub_year, issue_order,
             volume, number, suppl,
             elocation, fpage, lpage,
-            first_author_surname[:30],
-            last_author_surname[:30],
-            article_title[:100], other_pids[:200]
+            first_author_surname,
+            last_author_surname,
+            article_title, other_pids,
         )
 
     def _load_input(self, v2, v3, aop, filename, doi,
@@ -162,26 +160,48 @@ class DocManager:
                     first_author_surname, last_author_surname,
                     article_title, other_pids,
                     ):
-        _values = (
-            v2, aop, doi,
-            status,
-            pub_year, issue_order,
-            volume, number, suppl,
-            elocation, fpage, lpage,
-            first_author_surname, last_author_surname,
-            article_title,
+        UPPER_CONTENTS = (
+            'doi', 'elocation', 'fpage', 'lpage',
+            'status',
+            'first_author_surname', 'last_author_surname',
+            'article_title',
+            'volume', 'number', 'suppl',
         )
-        values = []
-        for vv in _values:
-            try:
-                values.append(vv.upper())
-            except (AttributeError, TypeError, ValueError):
-                values.append(vv)
-        values.append(v2[1:10])
-        values.append(v3)
-        values.append(other_pids)
-        values.append(filename)
-        self._input_data = dict(zip(self._input_attributes, values))
+
+        v2 = v2[:23]
+        aop = aop[:23]
+        filename = filename[:80]
+        status = status[:15]
+        first_author_surname = first_author_surname[:30]
+        last_author_surname = last_author_surname[:30]
+        article_title = article_title[:100]
+        other_pids = other_pids[:200]
+        issue_order = str(issue_order)
+        issue_order = (issue_order[4:] or issue_order).zfill(4)
+
+        self._input_data = {}
+        self._input_data["v2"] = v2
+        self._input_data["aop"] = aop
+        self._input_data["doi"] = doi
+        self._input_data["status"] = status
+        self._input_data["pub_year"] = pub_year
+        self._input_data["issue_order"] = v2[14:][:4]
+        self._input_data["volume"] = volume
+        self._input_data["number"] = number
+        self._input_data["suppl"] = suppl
+        self._input_data["elocation"] = elocation
+        self._input_data["fpage"] = fpage
+        self._input_data["lpage"] = lpage
+        self._input_data["first_author_surname"] = first_author_surname
+        self._input_data["last_author_surname"] = last_author_surname
+        self._input_data["article_title"] = article_title
+        self._input_data["issn"] = v2[1:10]
+        self._input_data["v3"] = v3
+        self._input_data["other_pids"] = other_pids
+        self._input_data["filename"] = filename
+
+        for label in UPPER_CONTENTS:
+            self._input_data[label] = self._input_data[label].upper()
 
     @property
     def input_data(self):
