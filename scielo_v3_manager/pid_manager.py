@@ -185,7 +185,7 @@ class DocManager:
         self._input_data["doi"] = doi
         self._input_data["status"] = status
         self._input_data["pub_year"] = pub_year
-        self._input_data["issue_order"] = v2[14:][:4]
+        self._input_data["issue_order"] = issue_order
         self._input_data["volume"] = volume
         self._input_data["number"] = number
         self._input_data["suppl"] = suppl
@@ -437,8 +437,6 @@ class Manager:
                     elocation, fpage, lpage,
                     first_author_surname, last_author_surname,
                     article_title, other_pids):
-        if len(issue_order) > 4:
-            issue_order = issue_order[4:].zfill(4)
         with self.session_scope() as session:
             doc_manager = DocManager(
                 session, generate_v3,
