@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column, Integer, String, DateTime,
     UniqueConstraint, create_engine,
 )
+from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -72,6 +73,7 @@ class Documents(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     v2 = Column(String(23), index=True, nullable=False)
     v3 = Column(String(23), index=True, nullable=False)
+    v3_origin = Column(String(23), nullable=False)
     aop = Column(String(23), index=True)
 
     filename = Column(String(50), index=True)
@@ -232,8 +234,8 @@ class DocManager:
             ['issue_order', 'elocation', 'fpage', 'lpage']
         )
 
-    def _db_query(self, **kwargs):
-        return self._session.query(Documents).filter_by(**kwargs).all()
+    def _db_query(self, table_class, **kwargs):
+        return self._session.query(table_class).filter_by(**kwargs).all()
 
     def _get_document_published_in_an_issue_attributes(self):
         """
@@ -246,7 +248,7 @@ class DocManager:
             k: self.input_data.get(k) or ''
             for k in self._doc_and_issue_attributes
         }
-        found = self._db_query(**params)
+        found = self._db_query(Documents, **params)
         if len(found) == 1:
             # encontrou
             return found[0]
@@ -285,14 +287,77 @@ class DocManager:
         params.update(
             {"volume": "", "number": "", "suppl": "", "fpage": "", "lpage": ""}
         )
-        found = self._db_query(**params)
+        found = self._db_query(Documents, **params)
 
         if len(found) == 0:
             # não está registrado
             return None
 
         if len(found) == 1:
-            return {"aop": doc.v2, "v3": doc.v3}
+            doc = found[0]
+            return {"aop": doc.v2, "v3": doc.v3,
+                    "v3_origin": f"docs_{doc.id}"}
+
+        raise MoreThanOneRecordFoundError(
+            "Found more than one: {}".format(
+                " ".join([doc.id for doc in found])
+            )
+        )
+
+    def _get_document_from_pids_table(self):
+        """
+        Busca registro na tabela `pids`:
+            id
+            v2
+            v3
+            aop
+            filename
+            prefix_v2
+            prefix_aop
+            doi
+            status
+
+        """
+        found = self._session.query(NewPidVersion).filter(
+            NewPidVersion.filename == (self.input_data.get("filename") or ''),
+            func.upper(NewPidVersion.doi) == (self.input_data.get("doi") or ''),
+        ).all()
+
+        if len(found) == 0:
+            # não está registrado
+            return None
+
+        if len(found) == 1:
+            d = {
+                "v3": found[0].v3, "v3_origin": f"pids_{found[0].id}"
+            }
+            if found[0].aop:
+                d['aop'] = found[0].aop
+            return d
+        raise MoreThanOneRecordFoundError(
+            "Found more than one: {}".format(
+                " ".join([doc.id for doc in found])
+            )
+        )
+
+    def _get_document_from_pid_versions_table(self):
+        """
+        Busca registro na tabela `pid_versions`:
+            id
+            v2 (ou aop)
+        """
+        params = {
+            "v2": self.input_data.get("v2") or '',
+        }
+        found = self._db_query(PidVersion, **params)
+
+        if len(found) == 0:
+            # não está registrado
+            return None
+
+        if len(found) == 1:
+            return {"v3": found[0].v3,
+                    "v3_origin": f"pid_versions_{found[0].id}"}
 
         raise MoreThanOneRecordFoundError(
             "Found more than one: {}".format(
@@ -302,44 +367,39 @@ class DocManager:
 
     def _get_unique_v3(self, v3):
         while True:
-            unique_v3 = v3 or self._generate_v3()
-            registered = self._db_query(**{"v3": unique_v3})
-            if not registered:
-                return unique_v3
+            generated = self._generate_v3()
+            if not self.is_registered_v3(generated):
+                return generated
+
+    def is_registered_v3(self, v3):
+        for table_class in (Documents, NewPidVersion, PidVersion):
+            registered = self._db_query(table_class, **{"v3": v3})
+            if registered:
+                return True
+        return False
 
     def _register_doc(self, recovered_data=None):
         # create
-        input_data = self.input_data.copy()
-        input_data.update(recovered_data or {})
-        data = Documents(
-            issn=input_data.get("issn") or '',
-            v2=input_data.get("v2") or '',
-            v3=self._get_unique_v3(input_data.get("v3")),
-            aop=input_data.get("aop") or '',
-            filename=input_data.get("filename") or '',
-            doi=input_data.get("doi") or '',
-            pub_year=input_data.get("pub_year") or '',
-            issue_order=input_data.get("issue_order") or '',
-            volume=input_data.get("volume") or '',
-            number=input_data.get("number") or '',
-            suppl=input_data.get("suppl") or '',
-            elocation=input_data.get("elocation") or '',
-            fpage=input_data.get("fpage") or '',
-            lpage=input_data.get("lpage") or '',
-            first_author_surname=input_data.get("first_author_surname") or '',
-            last_author_surname=input_data.get("last_author_surname") or '',
-            article_title=(input_data.get("article_title") or ''),
-            other_pids=(input_data.get("other_pids") or ''),
-            status=(input_data.get("status") or ''),
-        )
-        self._session.add(data)
+        data = self.input_data.copy()
+
+        if data["v3"]:
+            if recovered_data.get("v3") and recovered_data["v3"] != data["v3"]:
+                del recovered_data["v3"]
+            elif self.is_registered_v3(data["v3"]):
+                data["v3"] = self._get_unique_v3()
+        else:
+            data["v3"] = self._get_unique_v3()
+
+        data.update(recovered_data or {})
+        doc = Documents(**data)
+        self._session.add(doc)
 
         try:
             self._session.commit()
         except SQLAlchemyError as e:
             self._session.rollback()
             raise RegistrationError("Rollback: %s" % str(e))
-        return data.as_dict
+        return doc.as_dict
 
     def manage_docs(self):
         """
@@ -353,10 +413,14 @@ class DocManager:
         response["input"] = self.input_data
         try:
             # busca o documento com dados do fascículo ()
-            registered = self._get_document_with_issue_attributes()
+            registered = self._get_document_published_in_an_issue_attributes()
             if not registered:
-                # recupera dados de aop, se aplicável
-                recovered_data = self._get_document_aop_version()
+                # recupera dados de aop, se aplicável, ou das outras tabelas
+                recovered_data = (
+                    self._get_document_aop_version() or
+                    self._get_document_from_pids_table() or
+                    self._get_document_from_pid_versions_table()
+                )
         except MoreThanOneRecordFoundError as e:
             # melhor criar novo registro e tratar da ambiguidade posteriormente
             # que recuperar erroneamente o registro
