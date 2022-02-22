@@ -172,35 +172,35 @@ class DocManager:
 
         v2 = v2[:23]
         aop = aop[:23]
-        filename = filename[:80]
+        filename = filename[:50]
         status = status[:15]
         first_author_surname = first_author_surname[:30]
         last_author_surname = last_author_surname[:30]
-        article_title = article_title[:100]
+        article_title = article_title[:50]
         other_pids = other_pids[:200]
         issue_order = str(issue_order)
         issue_order = (issue_order[4:] or issue_order).zfill(4)
 
         self._input_data = {}
-        self._input_data["v2"] = v2
-        self._input_data["aop"] = aop
-        self._input_data["doi"] = doi
-        self._input_data["status"] = status
-        self._input_data["pub_year"] = pub_year
-        self._input_data["issue_order"] = issue_order
-        self._input_data["volume"] = volume
-        self._input_data["number"] = number
-        self._input_data["suppl"] = suppl
-        self._input_data["elocation"] = elocation
-        self._input_data["fpage"] = fpage
-        self._input_data["lpage"] = lpage
-        self._input_data["first_author_surname"] = first_author_surname
-        self._input_data["last_author_surname"] = last_author_surname
-        self._input_data["article_title"] = article_title
-        self._input_data["issn"] = v2[1:10]
-        self._input_data["v3"] = v3
-        self._input_data["other_pids"] = other_pids
-        self._input_data["filename"] = filename
+        self._input_data["v2"] = v2 or ''
+        self._input_data["aop"] = aop or ''
+        self._input_data["doi"] = doi or ''
+        self._input_data["status"] = status or ''
+        self._input_data["pub_year"] = pub_year or ''
+        self._input_data["issue_order"] = issue_order or ''
+        self._input_data["volume"] = volume or ''
+        self._input_data["number"] = number or ''
+        self._input_data["suppl"] = suppl or ''
+        self._input_data["elocation"] = elocation or ''
+        self._input_data["fpage"] = fpage or ''
+        self._input_data["lpage"] = lpage or ''
+        self._input_data["first_author_surname"] = first_author_surname or ''
+        self._input_data["last_author_surname"] = last_author_surname or ''
+        self._input_data["article_title"] = article_title or ''
+        self._input_data["issn"] = v2[1:10] or ''
+        self._input_data["v3"] = v3 or ''
+        self._input_data["other_pids"] = other_pids or ''
+        self._input_data["filename"] = filename or ''
 
         for label in UPPER_CONTENTS:
             self._input_data[label] = self._input_data[label].upper()
@@ -365,7 +365,7 @@ class DocManager:
             )
         )
 
-    def _get_unique_v3(self, v3):
+    def _get_unique_v3(self):
         while True:
             generated = self._generate_v3()
             if not self.is_registered_v3(generated):
