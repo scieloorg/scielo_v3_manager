@@ -182,6 +182,7 @@ class DocManager:
         issue_order = (issue_order[4:] or issue_order).zfill(4)
 
         self._input_data = {}
+        self._input_data["v3_origin"] = ''
         self._input_data["v2"] = v2 or ''
         self._input_data["aop"] = aop or ''
         self._input_data["doi"] = doi or ''
@@ -199,6 +200,8 @@ class DocManager:
         self._input_data["article_title"] = article_title or ''
         self._input_data["issn"] = v2[1:10] or ''
         self._input_data["v3"] = v3 or ''
+        if v3:
+            self._input_data["v3_origin"] = "provided"
         self._input_data["other_pids"] = other_pids or ''
         self._input_data["filename"] = filename or ''
 
@@ -381,14 +384,17 @@ class DocManager:
     def _register_doc(self, recovered_data=None):
         # create
         data = self.input_data.copy()
-
+        
         if data["v3"]:
             if recovered_data.get("v3") and recovered_data["v3"] != data["v3"]:
                 del recovered_data["v3"]
+                del recovered_data["v3_origin"]
             elif self.is_registered_v3(data["v3"]):
                 data["v3"] = self._get_unique_v3()
+                data["v3_origin"] = "generated"
         else:
             data["v3"] = self._get_unique_v3()
+            data["v3_origin"] = "generated"
 
         data.update(recovered_data or {})
         doc = Documents(**data)
