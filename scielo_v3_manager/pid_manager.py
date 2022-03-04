@@ -259,16 +259,7 @@ class DocManager:
             params["v2"] = v2
 
         found = self._db_query(Documents, **params)
-        if len(found) == 1:
-            # encontrou
-            return found[0].as_dict
-
-        if len(found) > 1:
-            raise MoreThanOneRecordFoundError(
-                "Found more than one: {}".format(
-                    " ".join([doc.id for doc in found])
-                )
-            )
+        return sorted(found, key=lambda item: item.id)[-1]
 
     def _get_document_aop_version(self):
         """
@@ -448,7 +439,10 @@ class DocManager:
             }
             registered = None
         if registered:
-            response['registered'] = registered
+            if self.input_data["v2"] == registered["v2"]:
+                response['registered'] = registered
+            else:
+                response['created'] = self._register_doc()
             return response
         try:
             response['created'] = self._register_doc(recovered_data)

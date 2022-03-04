@@ -78,7 +78,7 @@ def get_mock_document(data=None):
         "number": "",
         "suppl": "",
         "elocation": "",
-        "fpage": "",
+        "fpage": "415",
         "lpage": "",
         "first_author_surname": "ALMEIDA",
         "last_author_surname": "MENDONCA",
@@ -90,7 +90,7 @@ def get_mock_document(data=None):
     return _data
 
 
-@patch('scielo_v3_manager.pid_manager.DocManager._get_document_published_in_an_issue_attributes')
+@patch('scielo_v3_manager.pid_manager.DocManager._get_document_published_in_an_issue')
 @patch('scielo_v3_manager.pid_manager.DocManager._get_document_aop_version')
 @patch('scielo_v3_manager.pid_manager.DocManager._get_document_from_pids_table')
 @patch('scielo_v3_manager.pid_manager.DocManager._get_document_from_pid_versions_table')
@@ -103,16 +103,16 @@ class RegisterArticlesTest(TestCase):
             mock__get_document_from_pid_versions_table,
             mock__get_document_from_pids_table,
             mock__get_document_aop_version,
-            mock__get_document_published_in_an_issue_attributes,
+            mock__get_document_published_in_an_issue,
             ):
         """
         Test registration of v2 and article metadata which are not registered.
-        Returns created data
+        Returns created record data
         """
         mock__get_document_from_pid_versions_table.return_value = None
         mock__get_document_from_pids_table.return_value = None
         mock__get_document_aop_version.return_value = None
-        mock__get_document_published_in_an_issue_attributes.side_effect = [
+        mock__get_document_published_in_an_issue.side_effect = [
             None, None
         ]
         REGISTER_DOC_RESULT = get_mock_document({"id": 14})
@@ -130,14 +130,14 @@ class RegisterArticlesTest(TestCase):
             mock__get_document_from_pid_versions_table,
             mock__get_document_from_pids_table,
             mock__get_document_aop_version,
-            mock__get_document_published_in_an_issue_attributes,
+            mock__get_document_published_in_an_issue,
             ):
         """
         Test registration of v2 and article metadata which are registered.
-        Returns registered data
+        Returns registered record data
         """
         RESULT = get_mock_document({"id": 14})
-        mock__get_document_published_in_an_issue_attributes.return_value = RESULT
+        mock__get_document_published_in_an_issue.return_value = RESULT
         doc_data = get_mock_document()
 
         doc_manager = DocManager(ANY, ANY, **doc_data)
@@ -148,3 +148,37 @@ class RegisterArticlesTest(TestCase):
         mock__get_document_aop_version.asset_not_called()
         mock__register_doc.asset_not_called()
         self.assertDictEqual(RESULT, result["registered"])
+
+    def test_register_article_which_v2_is_not_registered_and_article_metadata_is_registered(
+            self,
+            mock__register_doc,
+            mock__get_document_from_pid_versions_table,
+            mock__get_document_from_pids_table,
+            mock__get_document_aop_version,
+            mock__get_document_published_in_an_issue,
+            ):
+        """
+        Test registration of document which v2 is not registered and
+            article metadata is registered.
+        There will be 2 records with the same article metadata, but different
+            values for v2
+        Returns created record
+        """
+        RESULT = get_mock_document({"id": 14})
+        # busca o documento com dados do fascículo + pid v2 -> nao encontra
+        # busca o documento com dados do fascículo sem pid v2 -> encontra
+        mock__get_document_published_in_an_issue.side_effect = [
+            None,
+            RESULT,
+        ]
+        mock__register_doc.return_value = RESULT
+
+        doc_data = get_mock_document({"v2": "S1807-59322020000100490"})
+        doc_manager = DocManager(ANY, ANY, **doc_data)
+        result = doc_manager.manage_docs()
+
+        mock__get_document_from_pid_versions_table.asset_not_called()
+        mock__get_document_from_pids_table.asset_not_called()
+        mock__get_document_aop_version.asset_not_called()
+        mock__register_doc.asset_called_once_with({})
+        self.assertDictEqual(RESULT, result["created"])
