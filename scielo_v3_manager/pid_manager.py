@@ -110,16 +110,20 @@ class Documents(Base):
     @property
     def as_dict(self):
         NAMES = (
-            'v2', 'v3', 'aop', 'filename', 'doi',
-            'pub_year', 'issue_order', 'elocation', 'fpage', 'lpage',
+            'v2', 'v3', 'v3_origin',
+            'aop', 'filename', 'doi',
+            'pub_year', 'issue_order',
+            'elocation', 'fpage', 'lpage',
             'first_author_surname', 'last_author_surname',
             'article_title', 'other_pids',
             'issn',
             'id', 'updated', 'created',
         )
         values = (
-            self.v2, self.v3, self.aop, self.filename, self.doi,
-            self.pub_year, self.issue_order, self.elocation, self.fpage, self.lpage,
+            self.v2, self.v3, self.v3_origin,
+            self.aop, self.filename, self.doi,
+            self.pub_year, self.issue_order,
+            self.elocation, self.fpage, self.lpage,
             self.first_author_surname, self.last_author_surname,
             self.article_title, self.other_pids,
             self.issn,
@@ -240,7 +244,7 @@ class DocManager:
     def _db_query(self, table_class, **kwargs):
         return self._session.query(table_class).filter_by(**kwargs).all()
 
-    def _get_document_published_in_an_issue_attributes(self):
+    def _get_document_published_in_an_issue(self, v2=None):
         """
         Busca pelos dados do artigo + issue:
             ['issn', 'pub_year',
@@ -251,10 +255,13 @@ class DocManager:
             k: self.input_data.get(k) or ''
             for k in self._doc_and_issue_attributes
         }
+        if v2:
+            params["v2"] = v2
+
         found = self._db_query(Documents, **params)
         if len(found) == 1:
             # encontrou
-            return found[0]
+            return found[0].as_dict
 
         if len(found) > 1:
             raise MoreThanOneRecordFoundError(
@@ -418,8 +425,13 @@ class DocManager:
         response = {}
         response["input"] = self.input_data
         try:
-            # busca o documento com dados do fascículo ()
-            registered = self._get_document_published_in_an_issue_attributes()
+            # busca o documento com dados do fascículo + pid v2
+            registered = self._get_document_published_in_an_issue(
+                self.input_data.get("v2")
+            )
+            if not registered:
+                # busca o documento com dados do fascículo, sem pid v2
+                registered = self._get_document_published_in_an_issue()
             if not registered:
                 # recupera dados de aop, se aplicável, ou das outras tabelas
                 recovered_data = (
@@ -436,10 +448,10 @@ class DocManager:
             }
             registered = None
         if registered:
-            response['registered'] = registered.as_dict
+            response['registered'] = registered
             return response
         try:
-            response['saved'] = self._register_doc(recovered_data)
+            response['created'] = self._register_doc(recovered_data)
         except RegistrationError as e:
             response['exception'] = {
                 'type': str(type(e)),
