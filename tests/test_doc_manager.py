@@ -420,3 +420,48 @@ class RegisterArticlesTest(TestCase):
         mock__save_record.assert_called_once_with(doc_data)
 
         self.assertIsNotNone(result["created"])
+
+    def test_register_article_which_article_is_registered_in_table_docs_as_aop(
+            self,
+            mock__get_unique_v3,
+            mock_is_registered_v3,
+            mock__save_record,
+            mock__get_document_from_pid_versions_table,
+            mock__get_document_from_pids_table,
+            mock__get_document_aop_version,
+            mock__get_document_published_in_an_issue,
+            ):
+        """
+        Test registration of document which article is registered as aop
+
+        Returns created record
+        """
+        # busca o documento com dados do fascículo + pid v2 -> nao encontra
+        # busca o documento com dados do fascículo sem pid v2 -> nao encontra
+        mock__get_document_published_in_an_issue.side_effect = [
+            None,
+            None,
+        ]
+
+        mock__get_document_aop_version.return_value = {
+            "aop": "recovered_aop",
+            "v3": "recovered_from_docs",
+            "v3_origin": "recovered_from_docs",
+        }
+        doc_data = get_mock_document(id=None)
+
+        doc_manager = DocManager(ANY, ANY, **doc_data)
+        result = doc_manager.manage_docs()
+
+        mock__get_document_from_pid_versions_table.assert_not_called()
+        mock__get_document_from_pids_table.assert_not_called()
+        mock__get_unique_v3.assert_not_called()
+        mock_is_registered_v3.assert_not_called()
+
+        doc_data['issn'] = doc_data['v2'][1:10]
+        doc_data['v3'] = "recovered_from_docs"
+        doc_data['v3_origin'] = "recovered_from_docs"
+        doc_data['aop'] = "recovered_aop"
+        mock__save_record.assert_called_once_with(doc_data)
+
+        self.assertIsNotNone(result["created"])
