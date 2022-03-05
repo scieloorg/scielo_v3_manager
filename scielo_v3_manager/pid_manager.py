@@ -259,7 +259,10 @@ class DocManager:
             params["v2"] = v2
 
         found = self._db_query(Documents, **params)
-        return sorted(found, key=lambda item: item.id)[-1]
+        try:
+            return sorted(found, key=lambda item: item.id)[-1]
+        except IndexError:
+            return None
 
     def _get_document_aop_version(self):
         """

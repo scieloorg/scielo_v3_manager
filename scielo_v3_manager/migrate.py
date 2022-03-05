@@ -61,8 +61,8 @@ def insert_into_table(manager,
         except KeyError:
             pass
         try:
-            del response['saved']['updated']
-            del response['saved']['created']
+            del response['created']['updated']
+            del response['created']['created']
         except KeyError:
             pass
 
