@@ -92,8 +92,64 @@ def get_mock_document(id, data=None):
     if id:
         _data["id"] = id
         _data["v3"] = "registered_v3"
+        _data["v3_origin"] = "registered"
     _data.update(data or {})
     return _data
+
+
+class PrepareRecordToSaveTest(TestCase):
+
+    def test_prepare_data_to_save__uses_v3_from_recovered_data(self):
+
+        def _get_unique_v3():
+            return 'unique_pid_v3'
+
+        doc_data = get_mock_document(id=None)
+        doc_manager = DocManager(ANY, ANY, **doc_data)
+        doc_manager._get_unique_v3 = _get_unique_v3
+
+        expected = {
+            "original_data": "any",
+            "v3": "v3_from_recovered_data",
+            "v3_origin": "v3_origin_from_recovered_data",
+        }
+
+        data = {"original_data": "any", "v3": ""}
+        recovered_data = {
+            "v3": "v3_from_recovered_data",
+            "v3_origin": "v3_origin_from_recovered_data",
+        }
+        result = doc_manager._prepare_record_to_save(data, recovered_data)
+        self.assertDictEqual(expected, result)
+
+    def test_prepare_data_to_save__uses_recovered_data_instead_of_doc_data(self):
+
+        def _get_unique_v3():
+            return 'unique_pid_v3'
+
+        doc_data = get_mock_document(id=None)
+        doc_manager = DocManager(ANY, ANY, **doc_data)
+        doc_manager._get_unique_v3 = _get_unique_v3
+
+        expected = {
+            "original_data": "any",
+            "v3": "v3_from_recovered_data",
+            "v3_origin": "v3_origin_from_recovered_data",
+            "aop": "aop_recovered",
+        }
+
+        data = {
+            "original_data": "any",
+            "v3": "este_pid_sera_ignorado",
+            "aop": "",
+        }
+        recovered_data = {
+            "v3": "v3_from_recovered_data",
+            "v3_origin": "v3_origin_from_recovered_data",
+            "aop": "aop_recovered",
+        }
+        result = doc_manager._prepare_record_to_save(data, recovered_data)
+        self.assertDictEqual(expected, result)
 
 
 @patch('scielo_v3_manager.pid_manager.DocManager._get_document_published_in_an_issue')
@@ -132,6 +188,10 @@ class RegisterArticlesTest(TestCase):
 
         doc_manager = DocManager(ANY, ANY, **doc_data)
         result = doc_manager.manage_docs()
+
+        doc_data['issn'] = doc_data['v2'][1:10]
+        doc_data['v3'] = "new_pid_v3"
+        doc_data['v3_origin'] = "generated"
         mock__save_record.assert_called_once_with(doc_data)
         self.assertIsNotNone(result["created"])
 
@@ -194,7 +254,7 @@ class RegisterArticlesTest(TestCase):
             REGISTERED_RECORD_DATA,
         ]
 
-        doc_data = REGISTERED_RECORD_DATA.copy()
+        doc_data = get_mock_document(id=None)
         doc_data["v2"] = "S1807-59322020000100490"
 
         doc_manager = DocManager(ANY, ANY, **doc_data)
@@ -203,6 +263,10 @@ class RegisterArticlesTest(TestCase):
         mock__get_document_from_pid_versions_table.assert_not_called()
         mock__get_document_from_pids_table.assert_not_called()
         mock__get_document_aop_version.assert_not_called()
+
+        doc_data['issn'] = doc_data['v2'][1:10]
+        doc_data['v3'] = "registered_v3"
+        doc_data['v3_origin'] = "registered"
         mock__save_record.assert_called_once_with(doc_data)
         self.assertIsNotNone(result["created"])
 

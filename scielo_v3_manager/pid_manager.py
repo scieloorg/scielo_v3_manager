@@ -379,21 +379,13 @@ class DocManager:
                 return True
         return False
 
-    def _prepare_record_to_save(self, recovered_data=None):
+    def _prepare_record_to_save(self, data, recovered_data=None):
         recovered_data = recovered_data or {}
-        # create
-        data = self.input_data.copy()
 
-        if data["v3"]:
-            if recovered_data.get("v3") and recovered_data["v3"] != data["v3"]:
-                del recovered_data["v3"]
-                del recovered_data["v3_origin"]
-            elif self.is_registered_v3(data["v3"]):
+        if not recovered_data.get("v3"):
+            if not data["v3"] or self.is_registered_v3(data["v3"]):
                 data["v3"] = self._get_unique_v3()
                 data["v3_origin"] = "generated"
-        else:
-            data["v3"] = self._get_unique_v3()
-            data["v3_origin"] = "generated"
 
         data.update(recovered_data or {})
         return data
@@ -409,7 +401,8 @@ class DocManager:
         return doc.as_dict
 
     def _register_doc(self, recovered_data=None):
-        record_data = self._prepare_record_to_save(recovered_data)
+        data = self.input_data.copy()
+        record_data = self._prepare_record_to_save(data, recovered_data)
         return self._save_record(record_data)
 
     def manage_docs(self):
@@ -449,7 +442,13 @@ class DocManager:
             if self.input_data["v2"] == registered["v2"]:
                 response['registered'] = registered
             else:
-                response['created'] = self._register_doc()
+                recovered_data = {
+                    "v3": registered["v3"],
+                    "v3_origin": registered["v3_origin"],
+                }
+                if registered.get("aop"):
+                    recovered_data["aop"] = registered["aop"]
+                response['created'] = self._register_doc(recovered_data)
             return response
         try:
             response['created'] = self._register_doc(recovered_data)
