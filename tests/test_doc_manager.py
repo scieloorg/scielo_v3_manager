@@ -175,7 +175,6 @@ class RegisterArticlesTest(TestCase):
         Test registration of v2 and article metadata which are not registered.
         Returns created record data
         """
-        mock_is_registered_v3.return_value = False
         mock__get_unique_v3.return_value = "new_pid_v3"
 
         mock__get_document_from_pid_versions_table.return_value = None
@@ -193,6 +192,9 @@ class RegisterArticlesTest(TestCase):
         doc_data['v3'] = "new_pid_v3"
         doc_data['v3_origin'] = "generated"
         mock__save_record.assert_called_once_with(doc_data)
+
+        mock_is_registered_v3.assert_not_called()
+
         self.assertIsNotNone(result["created"])
 
     def test_register_article_which_v2_and_article_metadata_are_registered(
@@ -210,9 +212,6 @@ class RegisterArticlesTest(TestCase):
         and they are in the same record.
         Returns registered record data
         """
-        mock_is_registered_v3.return_value = False
-        mock__get_unique_v3.return_value = "new_pid_v3"
-
         REGISTERED_RECORD_DATA = get_mock_document(id=14)
         mock__get_document_published_in_an_issue.return_value = REGISTERED_RECORD_DATA
 
@@ -224,6 +223,9 @@ class RegisterArticlesTest(TestCase):
         mock__get_document_from_pids_table.assert_not_called()
         mock__get_document_aop_version.assert_not_called()
         mock__save_record.assert_not_called()
+        mock__get_unique_v3.assert_not_called()
+        mock_is_registered_v3.assert_not_called()
+
         self.assertDictEqual(REGISTERED_RECORD_DATA, result["registered"])
 
     def test_register_article_which_v2_is_not_registered_and_article_metadata_is_registered(
@@ -243,9 +245,6 @@ class RegisterArticlesTest(TestCase):
             values for v2
         Returns created record
         """
-        mock_is_registered_v3.return_value = False
-        mock__get_unique_v3.return_value = "new_pid_v3"
-
         REGISTERED_RECORD_DATA = get_mock_document(id=15)
         # busca o documento com dados do fascículo + pid v2 -> nao encontra
         # busca o documento com dados do fascículo sem pid v2 -> encontra
@@ -263,10 +262,14 @@ class RegisterArticlesTest(TestCase):
         mock__get_document_from_pid_versions_table.assert_not_called()
         mock__get_document_from_pids_table.assert_not_called()
         mock__get_document_aop_version.assert_not_called()
+        mock__get_unique_v3.assert_not_called()
+        mock_is_registered_v3.assert_not_called()
 
         doc_data['issn'] = doc_data['v2'][1:10]
         doc_data['v3'] = "registered_v3"
         doc_data['v3_origin'] = "registered"
         mock__save_record.assert_called_once_with(doc_data)
+
         self.assertIsNotNone(result["created"])
+
 
