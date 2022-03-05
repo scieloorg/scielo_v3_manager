@@ -272,4 +272,63 @@ class RegisterArticlesTest(TestCase):
 
         self.assertIsNotNone(result["created"])
 
+    def test_register_article_which_v2_is_registered_and_article_metadata_is_not_registered(
+            self,
+            mock__get_unique_v3,
+            mock_is_registered_v3,
+            mock__save_record,
+            mock__get_document_from_pid_versions_table,
+            mock__get_document_from_pids_table,
+            mock__get_document_aop_version,
+            mock__get_document_published_in_an_issue,
+            ):
+        """
+        Test registration of document which v2 is registered and
+            article metadata is not registered.
+        There will be 2 records with same value of v2, but different
+            values of article metadata
+        Returns created record
+        """
+        doc_data = {
+            "v2": "S1807-59322020000100415",
+            "v3": "",
+            "aop": "",
+            "filename": "1807-5932-clin-75-e2021.xml",
+            "doi": "10.6061/CLINICS/2020/E2021",
+            "pub_year": "2020",
+            "issue_order": "0001",
+            "volume": "75",
+            "number": "",
+            "suppl": "",
+            "elocation": "",
+            "fpage": "455",
+            "lpage": "",
+            "first_author_surname": "ALMEIDA",
+            "last_author_surname": "MENDONCA",
+            "article_title": "XXXXXXXXX",
+            "other_pids": "",
+            "status": "",
+        }
 
+        # busca o documento com dados do fascículo + pid v2 -> nao encontra
+        # busca o documento com dados do fascículo sem pid v2 -> nao encontra
+        mock__get_document_published_in_an_issue.side_effect = [
+            None,
+            None,
+        ]
+        mock__get_unique_v3.return_value = "new_pid_v3"
+        mock__get_document_aop_version.return_value = None
+        mock__get_document_from_pids_table.return_value = None
+        mock__get_document_from_pid_versions_table.return_value = None
+
+        doc_manager = DocManager(ANY, ANY, **doc_data)
+        result = doc_manager.manage_docs()
+
+        doc_data['issn'] = doc_data['v2'][1:10]
+        doc_data['v3'] = "new_pid_v3"
+        doc_data['v3_origin'] = "generated"
+        mock__save_record.assert_called_once_with(doc_data)
+
+        mock_is_registered_v3.assert_not_called()
+
+        self.assertIsNotNone(result["created"])
