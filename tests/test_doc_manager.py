@@ -66,10 +66,13 @@ class DocManagerTest(TestCase):
         self.assertDictEqual(expected, result)
 
 
-def get_mock_document(data=None):
+def get_mock_document(id, data=None):
+    """
+    Cria um documento para testes
+    """
     _data = {
         "v2": "S1807-59322020000100415",
-        "v3": "gtQgKWgKNW8rrtTjF7mv3Ld",
+        "v3": "",
         "aop": "", "filename": "1807-5932-clin-75-e2022.xml",
         "doi": "10.6061/CLINICS/2020/E2022",
         "pub_year": "2020",
@@ -86,6 +89,9 @@ def get_mock_document(data=None):
         "other_pids": "cln_75p1 gtQgKWgKNW8rrtTjF7mv3Ld S1807-59322020000100415",
         "status": "",
     }
+    if id:
+        _data["id"] = id
+        _data["v3"] = "registered_v3"
     _data.update(data or {})
     return _data
 
@@ -122,7 +128,7 @@ class RegisterArticlesTest(TestCase):
         mock__get_document_published_in_an_issue.side_effect = [
             None, None
         ]
-        doc_data = get_mock_document()
+        doc_data = get_mock_document(id=None)
 
         doc_manager = DocManager(ANY, ANY, **doc_data)
         result = doc_manager.manage_docs()
@@ -147,10 +153,10 @@ class RegisterArticlesTest(TestCase):
         mock_is_registered_v3.return_value = False
         mock__get_unique_v3.return_value = "new_pid_v3"
 
-        REGISTERED_RECORD_DATA = get_mock_document({"id": 14})
+        REGISTERED_RECORD_DATA = get_mock_document(id=14)
         mock__get_document_published_in_an_issue.return_value = REGISTERED_RECORD_DATA
-        doc_data = get_mock_document()
 
+        doc_data = get_mock_document(id=None)
         doc_manager = DocManager(ANY, ANY, **doc_data)
         result = doc_manager.manage_docs()
 
@@ -180,7 +186,7 @@ class RegisterArticlesTest(TestCase):
         mock_is_registered_v3.return_value = False
         mock__get_unique_v3.return_value = "new_pid_v3"
 
-        REGISTERED_RECORD_DATA = get_mock_document({"id": 14})
+        REGISTERED_RECORD_DATA = get_mock_document(id=15)
         # busca o documento com dados do fascículo + pid v2 -> nao encontra
         # busca o documento com dados do fascículo sem pid v2 -> encontra
         mock__get_document_published_in_an_issue.side_effect = [
@@ -188,7 +194,9 @@ class RegisterArticlesTest(TestCase):
             REGISTERED_RECORD_DATA,
         ]
 
-        doc_data = get_mock_document({"v2": "S1807-59322020000100490"})
+        doc_data = REGISTERED_RECORD_DATA.copy()
+        doc_data["v2"] = "S1807-59322020000100490"
+
         doc_manager = DocManager(ANY, ANY, **doc_data)
         result = doc_manager.manage_docs()
 
