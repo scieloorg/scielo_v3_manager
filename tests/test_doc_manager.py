@@ -18,7 +18,7 @@ class DocManagerTest(TestCase):
                          'first_author_surname', 'last_author_surname',
                          'article_title', 'other_pids',
                          )
-        mock_l.asset_called_once_with(
+        mock_l.assert_called_once_with(
             'S1234-567820201111101234', 'v3', 'aop',
             'filename', 'doi',
             ANY,
@@ -132,7 +132,7 @@ class RegisterArticlesTest(TestCase):
 
         doc_manager = DocManager(ANY, ANY, **doc_data)
         result = doc_manager.manage_docs()
-        mock__save_record.asset_called_once_with(doc_data)
+        mock__save_record.assert_called_once_with(doc_data)
         self.assertIsNotNone(result["created"])
 
     def test_register_article_which_v2_and_article_metadata_are_registered(
@@ -160,10 +160,10 @@ class RegisterArticlesTest(TestCase):
         doc_manager = DocManager(ANY, ANY, **doc_data)
         result = doc_manager.manage_docs()
 
-        mock__get_document_from_pid_versions_table.asset_not_called()
-        mock__get_document_from_pids_table.asset_not_called()
-        mock__get_document_aop_version.asset_not_called()
-        mock__save_record.asset_not_called()
+        mock__get_document_from_pid_versions_table.assert_not_called()
+        mock__get_document_from_pids_table.assert_not_called()
+        mock__get_document_aop_version.assert_not_called()
+        mock__save_record.assert_not_called()
         self.assertDictEqual(REGISTERED_RECORD_DATA, result["registered"])
 
     def test_register_article_which_v2_is_not_registered_and_article_metadata_is_registered(
@@ -200,9 +200,9 @@ class RegisterArticlesTest(TestCase):
         doc_manager = DocManager(ANY, ANY, **doc_data)
         result = doc_manager.manage_docs()
 
-        mock__get_document_from_pid_versions_table.asset_not_called()
-        mock__get_document_from_pids_table.asset_not_called()
-        mock__get_document_aop_version.asset_not_called()
-        mock__save_record.asset_called_once_with(doc_data)
+        mock__get_document_from_pid_versions_table.assert_not_called()
+        mock__get_document_from_pids_table.assert_not_called()
+        mock__get_document_aop_version.assert_not_called()
+        mock__save_record.assert_called_once_with(doc_data)
         self.assertIsNotNone(result["created"])
 
