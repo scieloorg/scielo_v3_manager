@@ -379,10 +379,11 @@ class DocManager:
                 return True
         return False
 
-    def _register_doc(self, recovered_data=None):
+    def _prepare_record_to_save(self, recovered_data=None):
+        recovered_data = recovered_data or {}
         # create
         data = self.input_data.copy()
-        
+
         if data["v3"]:
             if recovered_data.get("v3") and recovered_data["v3"] != data["v3"]:
                 del recovered_data["v3"]
@@ -395,15 +396,21 @@ class DocManager:
             data["v3_origin"] = "generated"
 
         data.update(recovered_data or {})
-        doc = Documents(**data)
-        self._session.add(doc)
+        return data
 
+    def _save_record(self, data):
         try:
+            doc = Documents(**data)
+            self._session.add(doc)
             self._session.commit()
         except SQLAlchemyError as e:
             self._session.rollback()
             raise RegistrationError("Rollback: %s" % str(e))
         return doc.as_dict
+
+    def _register_doc(self, recovered_data=None):
+        record_data = self._prepare_record_to_save(recovered_data)
+        return self._save_record(record_data)
 
     def manage_docs(self):
         """
