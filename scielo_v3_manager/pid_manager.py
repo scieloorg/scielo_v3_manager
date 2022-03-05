@@ -9,7 +9,7 @@ from sqlalchemy import (
 )
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 
 
 Base = declarative_base()
@@ -23,7 +23,31 @@ class MoreThanOneRecordFoundError(Exception):
     ...
 
 
+class AlreadyRegisteredDocumentError(Exception):
+    ...
+
+
 class RegistrationError(Exception):
+    ...
+
+
+class QueryAOPError(Exception):
+    ...
+
+
+class QueryDocumentInPidsTableError(Exception):
+    ...
+
+
+class QueryDocumentInPidVersionsTableError(Exception):
+    ...
+
+
+class QueryDocumentError(Exception):
+    ...
+
+
+class IsRegisteredV3Error(Exception):
     ...
 
 
@@ -98,7 +122,7 @@ class Documents(Base):
     updated = Column(DateTime, default=datetime.utcnow(), onupdate=datetime.now())
 
     __table_args__ = (
-        UniqueConstraint('v3', name='_docs_'),
+        UniqueConstraint('v2', 'v3', name='_docs_'),
     )
 
     def __repr__(self):
@@ -174,14 +198,14 @@ class DocManager:
             'volume', 'number', 'suppl',
         )
 
-        v2 = v2[:23]
-        aop = aop[:23]
-        filename = filename[:50]
-        status = status[:15]
-        first_author_surname = first_author_surname[:30]
-        last_author_surname = last_author_surname[:30]
-        article_title = article_title[:50]
-        other_pids = other_pids[:200]
+        v2 = (v2 or '')[:23]
+        aop = (aop or '')[:23]
+        filename = (filename or '')[:50]
+        status = (status or '')[:15]
+        first_author_surname = (first_author_surname or '')[:30]
+        last_author_surname = (last_author_surname or '')[:30]
+        article_title = (article_title or '')[:50]
+        other_pids = (other_pids or '')[:200]
         issue_order = str(issue_order)
         issue_order = (issue_order[4:] or issue_order).zfill(4)
 
@@ -258,10 +282,14 @@ class DocManager:
         if v2:
             params["v2"] = v2
 
-        found = self._db_query(Documents, **params)
         try:
-            return sorted(found, key=lambda item: item.id)[-1]
-        except IndexError:
+            found = self._db_query(Documents, **params)
+        except Exception as e:
+            raise QueryDocumentError(
+                "Error querying doc %s %s" % (params, e))
+        try:
+            return sorted(found, key=lambda item: item.id)[-1].as_dict
+        except (IndexError, TypeError):
             return None
 
     def _get_document_aop_version(self):
@@ -291,7 +319,11 @@ class DocManager:
         params.update(
             {"volume": "", "number": "", "suppl": "", "fpage": "", "lpage": ""}
         )
-        found = self._db_query(Documents, **params)
+        try:
+            found = self._db_query(Documents, **params)
+        except Exception as e:
+            raise QueryAOPError("Error querying aop version %s %s" %
+                                (params, e))
 
         if len(found) == 0:
             # não está registrado
@@ -299,8 +331,9 @@ class DocManager:
 
         if len(found) == 1:
             doc = found[0]
-            return {"aop": doc.v2, "v3": doc.v3,
-                    "v3_origin": f"docs_{doc.id}"}
+            return {
+                "aop": doc.v2, "v3": doc.v3, "v3_origin": f"docs_{doc.id}",
+            }
 
         raise MoreThanOneRecordFoundError(
             "Found more than one: {}".format(
@@ -322,11 +355,20 @@ class DocManager:
             status
 
         """
-        found = self._session.query(NewPidVersion).filter(
-            NewPidVersion.filename == (self.input_data.get("filename") or ''),
-            func.upper(NewPidVersion.doi) == (self.input_data.get("doi") or ''),
-        ).all()
-
+        try:
+            found = self._session.query(NewPidVersion).filter(
+                NewPidVersion.filename == (self.input_data.get("filename") or ''),
+                func.upper(NewPidVersion.doi) == (self.input_data.get("doi") or ''),
+            ).all()
+        except Exception as e:
+            raise QueryDocumentInPidsTableError(
+                "Error querying doc in `pids`: %s %s %s" %
+                (
+                    self.input_data.get("filename"),
+                    self.input_data.get("doi"),
+                    e,
+                )
+            )
         if len(found) == 0:
             # não está registrado
             return None
@@ -353,7 +395,13 @@ class DocManager:
         params = {
             "v2": self.input_data.get("v2") or '',
         }
-        found = self._db_query(PidVersion, **params)
+
+        try:
+            found = self._db_query(PidVersion, **params)
+        except Exception as e:
+            raise QueryDocumentInPidVersionsTableError(
+                "Error querying doc in `pid_versions`: %s %s" % (params, e)
+            )
 
         if len(found) == 0:
             # não está registrado
@@ -376,10 +424,18 @@ class DocManager:
                 return generated
 
     def is_registered_v3(self, v3):
+        exceptions = []
         for table_class in (Documents, NewPidVersion, PidVersion):
-            registered = self._db_query(table_class, **{"v3": v3})
+            try:
+                registered = self._db_query(table_class, **{"v3": v3})
+            except Exception as e:
+                exceptions.append(str(e))
+                continue
+
             if registered:
                 return True
+        if len(exceptions) == 3:
+            raise IsRegisteredV3Error(" | ".join(exceptions))
         return False
 
     def _prepare_record_to_save(self, data, recovered_data=None):
@@ -398,6 +454,9 @@ class DocManager:
             doc = Documents(**data)
             self._session.add(doc)
             self._session.commit()
+        except IntegrityError as e:
+            self._session.rollback()
+            raise AlreadyRegisteredDocumentError("Rollback: %s" % str(e))
         except SQLAlchemyError as e:
             self._session.rollback()
             raise RegistrationError("Rollback: %s" % str(e))
@@ -437,8 +496,9 @@ class DocManager:
             # melhor criar novo registro e tratar da ambiguidade posteriormente
             # que recuperar erroneamente o registro
             response['exception'] = {
+                'action': 'manage_docs: querying record',
                 'type': str(type(e)),
-                'msg': str(e)
+                'msg': str(e),
             }
             registered = None
         if registered:
@@ -455,13 +515,17 @@ class DocManager:
             return response
         try:
             response['created'] = self._register_doc(recovered_data)
+        except AlreadyRegisteredDocumentError as e:
+            pass
         except RegistrationError as e:
             response['exception'] = {
+                'action': 'manage_docs: registering document',
                 'type': str(type(e)),
                 'msg': str(e)
             }
         except Exception as e:
             response['exception'] = {
+                'action': 'manage_docs: registering document',
                 'type': str(type(e)),
                 'msg': str(e)
             }
