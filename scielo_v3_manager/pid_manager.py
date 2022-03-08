@@ -101,7 +101,7 @@ class Documents(Base):
     aop = Column(String(23), index=True)
 
     filename = Column(String(50), index=True)
-    doi = Column(String(50), index=True)
+    doi = Column(String(200), index=True)
     issn = Column(String(9), index=True, nullable=False)
     pub_year = Column(String(4), index=True, nullable=False)
     issue_order = Column(String(4), index=True, nullable=False)
@@ -120,10 +120,6 @@ class Documents(Base):
 
     created = Column(DateTime, default=datetime.utcnow())
     updated = Column(DateTime, default=datetime.utcnow(), onupdate=datetime.now())
-
-    __table_args__ = (
-        UniqueConstraint('v2', 'v3', name='_docs_'),
-    )
 
     def __repr__(self):
         return (
